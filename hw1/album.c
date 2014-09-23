@@ -8,6 +8,7 @@
 const int INPUT_LEN = 1024;
 
 char** photos;
+int albumSize = 0;
 
 int stringWildcardMatch(char* input, char* wildcard) {
     int N = strlen(input);
@@ -36,12 +37,16 @@ int stringWildcardMatch(char* input, char* wildcard) {
                 dp[i * (N + 1) + j ] = 1;
         }
     }
-    return dp[M * N + N + M];
+    int output = dp[M * N + N + M];
+    free(dp);
+    return output;
 }
 
-void parsePathToPhotos(char** photos, char* path) {
+void parsePathToPhotos(char* path) {
     char directoryName[INPUT_LEN];
     char fileName[INPUT_LEN];
+    bzero(directoryName, INPUT_LEN);
+    bzero(fileName, INPUT_LEN);
 
     // Find the directory and the file name
     char* slash = strrchr(path, '/');
@@ -86,26 +91,40 @@ void parsePathToPhotos(char** photos, char* path) {
     struct dirent *ep;
     dp = opendir (directoryName);
     if (dp != NULL) {
+        printf("Find matching files:\n ");
         while (ep = readdir (dp)) {
             if(ep->d_name[0] != '.' 
-                && stringWildcardMatch(ep->d_name, fileName))
-                printf("Find file: %s%s\n", directoryName, ep->d_name);
+                && stringWildcardMatch(ep->d_name, fileName)) {
+                photos[albumSize] = (char*) malloc(sizeof(char) * INPUT_LEN);
+                if(photos[albumSize] == NULL) {
+                    fprintf(stderr, "Couldn't malloc memroy for %s \n", ep->d_name);
+                } else {
+                    strcpy(photos[albumSize], directoryName);
+                    strcat(photos[albumSize], ep->d_name);
+                    printf("\t%s\n", photos[albumSize]);
+                    if(++albumSize >= INPUT_LEN) {
+                        printf("Reaching the boundary of 1024 photos in one time, ignoring the rest of them.\n");
+                        break;
+                    }
+                }
+            }
         }
         (void) closedir (dp);
     }
     else {
-        fprintf(stderr, "Couldn't open the directory");
+        fprintf(stderr, "Couldn't open the directory.\n");
     }
 }
 
 int main(int argc, char * argv[]) {
+    photos = (char**) malloc(sizeof(char*) * INPUT_LEN);
     // Parse input with photos
     if(argc <= 1) {
-        parsePathToPhotos(photos, "");
+        parsePathToPhotos("");
     } else {
         int i = 1;
         for(; i < argc; i++ ) {
-            parsePathToPhotos(photos, argv[i]);
+            parsePathToPhotos(argv[i]);
         }
     }
     // Dsiplay thunmnail
