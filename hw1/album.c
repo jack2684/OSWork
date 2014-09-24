@@ -1,14 +1,21 @@
 // demo.c
 //  CS 58
 //  HW1: Digital Photo Album
-#include<string.h>
+#include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
-const int INPUT_LEN = 1024;
-
-char** photos;
+#include <pthread.h>
+#define INPUT_LEN 1024
+typedef struct AlbumItem_s {
+    char origin[INPUT_LEN];
+    char scale10[INPUT_LEN];
+    char scale50[INPUT_LEN];
+    char caption[INPUT_LEN];
+} AlbumItem;
+char** inputPhotos;
 int albumSize = 0;
+AlbumItem* album;
 
 int stringWildcardMatch(char* input, char* wildcard) {
     int N = strlen(input);
@@ -95,15 +102,15 @@ void parsePathToPhotos(char* path) {
         while (ep = readdir (dp)) {
             if(ep->d_name[0] != '.' 
                 && stringWildcardMatch(ep->d_name, fileName)) {
-                photos[albumSize] = (char*) malloc(sizeof(char) * INPUT_LEN);
-                if(photos[albumSize] == NULL) {
+                inputPhotos[albumSize] = (char*) malloc(sizeof(char) * INPUT_LEN);
+                if(inputPhotos[albumSize] == NULL) {
                     fprintf(stderr, "Couldn't malloc memroy for %s \n", ep->d_name);
                 } else {
-                    strcpy(photos[albumSize], directoryName);
-                    strcat(photos[albumSize], ep->d_name);
-                    printf("\t%s\n", photos[albumSize]);
+                    strcpy(inputPhotos[albumSize], directoryName);
+                    strcat(inputPhotos[albumSize], ep->d_name);
+                    printf("\t%s\n", inputPhotos[albumSize]);
                     if(++albumSize >= INPUT_LEN) {
-                        printf("Reaching the boundary of 1024 photos in one time, ignoring the rest of them.\n");
+                        printf("Reaching the boundary of 1024 inputPhotos in one time, ignoring the rest of them.\n");
                         break;
                     }
                 }
@@ -116,22 +123,104 @@ void parsePathToPhotos(char* path) {
     }
 }
 
+void displayImages(char* file) {
+    char cmd[INPUT_LEN * 2];
+    printf("Displaying photo, might take a few seconds... \n");
+    sprintf(cmd, "display %s", file);
+    system(cmd);
+}
+
+void addStrBeforeExtend(char* output, char* input, char* msg) {
+    char extend[INPUT_LEN], tmp[INPUT_LEN];
+    bzero(output, INPUT_LEN);
+    bzero(extend, INPUT_LEN);
+    bzero(tmp, INPUT_LEN);
+    char* extendPointer = strrchr(input, '.');
+    if(extendPointer != NULL)
+        strcpy(extend, extendPointer);
+    strncat(tmp, input, extendPointer - input);
+    strcat(tmp, msg);
+    strcat(tmp, extend);
+    strcpy(output, tmp);
+}
+
+void doRotate(char* file, char*  degree) {
+    char tmp[INPUT_LEN];
+    strcpy(tmp, file);
+    char cmd[INPUT_LEN * 2];
+    addStrBeforeExtend(file, tmp, ".rotate");
+    sprintf(cmd, "convert -rotate %s %s %s", degree, tmp, file);
+    printf("Executing: %s\n", cmd);
+    system(cmd);
+    puts("Rotation complete");
+}
+
+void rotateImages(char* file1, char* file2, char* file3) {
+    // Get user degreetructions
+    char degree[INPUT_LEN * 2];
+    bzero(degree, INPUT_LEN * 2);
+    while(1) {
+        printf("How much do you want to roate the image? (type in -360 ~ 360, 0 by default):");
+        int fetched = fgets(degree, 5, stdin);
+        if(strlen(degree) <= 5) { 
+            break;
+        } else {
+            puts("Input too long, try again...\n");
+        }
+    }
+    degree[strlen(degree) - 1] = '\0';
+
+    // Rotate the image
+    doRotate(file1, degree);
+    doRotate(file2, degree);
+    doRotate(file3, degree);
+}
+
+void captioningImage(char* caption, int idx) {
+    puts("Type in caption of this image (or skip captioning by simply hitting enter):");
+    fgets(caption, INPUT_LEN - 1, stdin);
+    printf("Captioning %dth done\n", idx);
+}
+
+void scaleImageOutof100(char* output, char* file, int percent) {
+    char cmd[INPUT_LEN * 2], scale[INPUT_LEN];
+    sprintf(scale, ".scale%d", percent);
+    addStrBeforeExtend(output, file, scale);
+    sprintf(cmd, "convert -geometry %d%% %s %s", percent, file, output);
+    printf("Executing: %s\n", cmd);
+    system(cmd);
+}
+
 int main(int argc, char * argv[]) {
-    photos = (char**) malloc(sizeof(char*) * INPUT_LEN);
-    // Parse input with photos
+    int i;
+    inputPhotos = (char**) malloc(sizeof(char*) * INPUT_LEN);
+    // Parse input with inputPhotos
     if(argc <= 1) {
         parsePathToPhotos("");
     } else {
-        int i = 1;
+        i = 1;
         for(; i < argc; i++ ) {
             parsePathToPhotos(argv[i]);
         }
     }
-    // Dsiplay thunmnail
-
-    // Rotate if needed
+    album = (AlbumItem*) malloc(sizeof(AlbumItem) * albumSize);
+   
+    // Process each of the inputPhotos
+    for(i = 0; i < albumSize; i++) {
+        printf("Processing image: %s\n", inputPhotos[i]);
+        strcpy(album[i].origin, inputPhotos[i]);
+        
+        // Scale the image
+        scaleImageOutof100(album[i].scale50, inputPhotos[i], 50);
+        scaleImageOutof100(album[i].scale10, inputPhotos[i], 10);
     
-    // Caption it if needed
+        // Dsiplay thunmnail
+        displayImages(album[i].scale10);
 
-    // Generate half size
+        // Rotate if needed
+        rotateImages(album[i].origin, album[i].scale50, album[i].scale10);
+        
+        // Caption it if needed
+        captioningImage(album[i].caption, i);
+    }
 }
