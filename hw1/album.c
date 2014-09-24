@@ -1,11 +1,15 @@
-// demo.c
-//  CS 58
-//  HW1: Digital Photo Album
+// album.c
+// CS 58
+// HW1: Digital Photo Album
+// author junjguan@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <errno.h>
 #define INPUT_LEN 1024
 typedef struct AlbumItem_s {
     char origin[INPUT_LEN];
@@ -125,9 +129,20 @@ void parsePathToPhotos(char* path) {
 
 void displayImages(char* file) {
     char cmd[INPUT_LEN * 2];
-    printf("Displaying photo, might take a few seconds... \n");
-    sprintf(cmd, "display %s", file);
-    system(cmd);
+    
+    printf("Displaying %s, might take a few seconds... \n", file);
+    int pid = fork();
+    if(pid == -1) {
+        fprintf(stderr, "Fork fails.\n");
+    } else if (pid > 0) {
+        return pid;
+    } else {
+        char cmd[] = "/usr/bin/display";
+        execl (cmd, cmd, file, NULL);
+        fprintf(stderr, "Error when execl(%s) with errno: %s \n", cmd, strerror(errno));
+        _exit (EXIT_FAILURE);
+    }
+    
 }
 
 void addStrBeforeExtend(char* output, char* input, char* msg) {
@@ -144,15 +159,24 @@ void addStrBeforeExtend(char* output, char* input, char* msg) {
     strcpy(output, tmp);
 }
 
-void doRotate(char* file, char*  degree) {
+void doRotate(char* output, char*  degree) {
     char tmp[INPUT_LEN];
-    strcpy(tmp, file);
+    strcpy(tmp, output);
     char cmd[INPUT_LEN * 2];
-    addStrBeforeExtend(file, tmp, ".rotate");
-    sprintf(cmd, "convert -rotate %s %s %s", degree, tmp, file);
-    printf("Executing: %s\n", cmd);
-    system(cmd);
-    puts("Rotation complete");
+    addStrBeforeExtend(output, tmp, ".rotate");
+    sprintf(cmd, "convert -rotate %s %s %s", degree, tmp, output);
+
+    int pid = fork();
+    if(pid == -1) {
+        fprintf(stderr, "Fork fails.\n");
+    } else if (pid > 0) {
+        return pid;
+    } else {
+        char cmd[] = "/usr/bin/convert";
+        execl (cmd, cmd, "-rotate", degree, tmp, output, NULL);
+        fprintf(stderr, "Error when execl(%s) with errno: %s \n", cmd, strerror(errno));
+        _exit (EXIT_FAILURE);
+    }
 }
 
 void rotateImages(char* file1, char* file2, char* file3) {
@@ -160,7 +184,7 @@ void rotateImages(char* file1, char* file2, char* file3) {
     char degree[INPUT_LEN * 2];
     bzero(degree, INPUT_LEN * 2);
     while(1) {
-        printf("How much do you want to roate the image? (type in -360 ~ 360, 0 by default):");
+        printf("How many degree do you want to roate the image? (type in -360 ~ 360, 0 by default):");
         int fetched = fgets(degree, 5, stdin);
         if(strlen(degree) <= 5) { 
             break;
@@ -177,18 +201,29 @@ void rotateImages(char* file1, char* file2, char* file3) {
 }
 
 void captioningImage(char* caption, int idx) {
-    puts("Type in caption of this image (or skip captioning by simply hitting enter):");
+    printf("Type in caption of this image (or skip captioning by simply hitting enter):");
     fgets(caption, INPUT_LEN - 1, stdin);
     printf("Captioning %dth done\n", idx);
 }
 
-void scaleImageOutof100(char* output, char* file, int percent) {
-    char cmd[INPUT_LEN * 2], scale[INPUT_LEN];
+int scaleImageOutof100(char* output, char* file, int percent) {
+    char cmd[INPUT_LEN * 2], scale[INPUT_LEN], percString[INPUT_LEN];
     sprintf(scale, ".scale%d", percent);
+    sprintf(percString, "%d%%", percent);
     addStrBeforeExtend(output, file, scale);
-    sprintf(cmd, "convert -geometry %d%% %s %s", percent, file, output);
-    printf("Executing: %s\n", cmd);
-    system(cmd);
+    sprintf(cmd, "convert -geometry %s %s %s", percString, file, output);
+    
+    int pid = fork();
+    if(pid == -1) {
+        fprintf(stderr, "Fork fails.\n");
+    } else if (pid > 0) {
+        return pid;
+    } else {
+        char cmd[] = "/usr/bin/convert";
+        execl (cmd, cmd, "-geometry", percString, file, output, NULL);
+        fprintf(stderr, "Error when execl(%s) with errno: %s \n", cmd, strerror(errno));
+        _exit (EXIT_FAILURE);
+    }
 }
 
 int main(int argc, char * argv[]) {
@@ -207,14 +242,17 @@ int main(int argc, char * argv[]) {
    
     // Process each of the inputPhotos
     for(i = 0; i < albumSize; i++) {
+        int pid1, pid2, stat1, stat2;
         printf("Processing image: %s\n", inputPhotos[i]);
         strcpy(album[i].origin, inputPhotos[i]);
         
         // Scale the image
-        scaleImageOutof100(album[i].scale50, inputPhotos[i], 50);
-        scaleImageOutof100(album[i].scale10, inputPhotos[i], 10);
+        pid1 = scaleImageOutof100(album[i].scale50, inputPhotos[i], 50);
+        pid2 = scaleImageOutof100(album[i].scale10, inputPhotos[i], 10);
     
         // Dsiplay thunmnail
+        waitpid(pid1, &stat1, NULL);
+        waitpid(pid2, &stat2, NULL);
         displayImages(album[i].scale10);
 
         // Rotate if needed
