@@ -68,6 +68,7 @@ void parsePathToPhotos(char* path) {
     // Find the directory and the file name
     char* slash = strrchr(path, '/');
     char tmpDir[INPUT_LEN];
+    bzero(tmpDir, INPUT_LEN);
     int len = strlen(path);
     if(slash - path + 1 > INPUT_LEN) {
         fprintf(stderr, "Directory name too long.\n");
@@ -154,7 +155,6 @@ void generateNewFileName(char* output, char* fileName, char* msg) {
     bzero(extend, INPUT_LEN);
     bzero(tmp, INPUT_LEN);
     
-    printf("Input filename is: %s\n", fileName);
     char* extendPointer = strrchr(fileName, '.');
     if(extendPointer != NULL)
         strcpy(extend, extendPointer);
@@ -162,13 +162,11 @@ void generateNewFileName(char* output, char* fileName, char* msg) {
     strncat(tmp, fileName, extendPointer - fileName);
     strcat(tmp, msg);
     strcat(tmp, extend);
-    printf("New file name is: %s\n", tmp);
     strcpy(output, tmp);
 }
 
 void doRotate(char* output, int idx, char*  degree) {
     char tmp[INPUT_LEN];
-    printf("Rotate input is: %s\n", output);
     strcpy(tmp, output);
     char cmd[INPUT_LEN * 2];
     generateNewFileName(output, strrchr(tmp, '/'), ".rotate");
@@ -213,12 +211,13 @@ void rotateImages(int idx) {
 void captioningImage(char* caption, int idx) {
     printf("Type in caption of this image (or skip captioning by simply hitting enter):");
     fgets(caption, INPUT_LEN - 1, stdin);
-    if(strlen(caption) <= 1) {
+    if(strlen(caption) <= 1 || caption[0] == '\n' || caption[0] == '\r') {
         strcpy(album[idx].caption, "<No title>");
     } else {
+        caption[strlen(caption) - 1] = '\0';
         strcpy(album[idx].caption, caption);
     }
-    printf("Captioning %dth done\n", idx);
+    printf("Captioning %s as '%s' done\n", strrchr(album[idx].origin, '/') + 1, album[idx].caption);
 }
 
 int scaleImageOutof100(int idx, int percent) {
@@ -301,6 +300,8 @@ int main(int argc, char * argv[]) {
         
         // Caption it if needed
         captioningImage(album[i].caption, i);
+
+        printf("\n----------------------------------------------\n");
     }
 
     // Generate html file
