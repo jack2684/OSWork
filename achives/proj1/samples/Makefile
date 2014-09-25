@@ -1,11 +1,11 @@
 .SUFFIXES: .c
 
-SRCS = album.c
+SRCS = demo.c
 OBJS = $(SRCS:.c=.o)
-OUTPUT = album
+OUTPUT = demo
 
 CC = gcc
-CFLAGS = -g -pthread
+CFLAGS = 
 LIBS = 
 
 demo: $(OBJS)
@@ -18,6 +18,5 @@ depend:
 	makedepend -I/usr/local/include/g++ -- $(CFLAGS) -- $(SRCS) 
 
 # DO NOT DELETE
-#
-#
-#
+
+
