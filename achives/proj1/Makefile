@@ -5,7 +5,7 @@ OBJS = $(SRCS:.c=.o)
 OUTPUT = album
 
 CC = gcc
-CFLAGS = -g -pthread
+CFLAGS = -g -lpthread -m32
 LIBS = 
 
 demo: $(OBJS)

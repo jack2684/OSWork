@@ -20,6 +20,12 @@ typedef struct AlbumItem_s {
 char** inputPhotos;
 int albumSize = 0;
 AlbumItem* album;
+char directoryName[INPUT_LEN];
+char cwd[INPUT_LEN];
+char header[] = "<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><title>a sample index.html</title>\
+<style type=\"text/css\"></style></head><body cz-shortcut-listen=\"true\"><h1>a sample index.html</h1>\
+Please click on a thumbnail to view a medium-size image\
+<h2>";
 
 int stringWildcardMatch(char* input, char* wildcard) {
     int N = strlen(input);
@@ -50,11 +56,11 @@ int stringWildcardMatch(char* input, char* wildcard) {
     }
     int output = dp[M * N + N + M];
     free(dp);
+    dp = NULL;
     return output;
 }
 
 void parsePathToPhotos(char* path) {
-    char directoryName[INPUT_LEN];
     char fileName[INPUT_LEN];
     bzero(directoryName, INPUT_LEN);
     bzero(fileName, INPUT_LEN);
@@ -62,6 +68,7 @@ void parsePathToPhotos(char* path) {
     // Find the directory and the file name
     char* slash = strrchr(path, '/');
     char tmpDir[INPUT_LEN];
+    bzero(tmpDir, INPUT_LEN);
     int len = strlen(path);
     if(slash - path + 1 > INPUT_LEN) {
         fprintf(stderr, "Directory name too long.\n");
@@ -80,7 +87,6 @@ void parsePathToPhotos(char* path) {
     if(!strlen(fileName)) {
         strcpy(fileName, "*");
     }
-    char cwd[INPUT_LEN];
     if (tmpDir[0] != '/' && getcwd(cwd, sizeof(cwd)) != NULL) {
         strcpy(directoryName, cwd);
         strcat(directoryName, "/");
@@ -110,8 +116,7 @@ void parsePathToPhotos(char* path) {
                 if(inputPhotos[albumSize] == NULL) {
                     fprintf(stderr, "Couldn't malloc memroy for %s \n", ep->d_name);
                 } else {
-                    strcpy(inputPhotos[albumSize], directoryName);
-                    strcat(inputPhotos[albumSize], ep->d_name);
+                    strcpy(inputPhotos[albumSize], ep->d_name);
                     printf("\t%s\n", inputPhotos[albumSize]);
                     if(++albumSize >= INPUT_LEN) {
                         printf("Reaching the boundary of 1024 inputPhotos in one time, ignoring the rest of them.\n");
@@ -141,31 +146,32 @@ void displayImages(char* file) {
         execl (cmd, cmd, file, NULL);
         fprintf(stderr, "Error when execl(%s) with errno: %s \n", cmd, strerror(errno));
         _exit (EXIT_FAILURE);
-    }
-    
+    }    
 }
 
-void addStrBeforeExtend(char* output, char* input, char* msg) {
+void generateNewFileName(char* output, char* fileName, char* msg) {
     char extend[INPUT_LEN], tmp[INPUT_LEN];
     bzero(output, INPUT_LEN);
     bzero(extend, INPUT_LEN);
     bzero(tmp, INPUT_LEN);
-    char* extendPointer = strrchr(input, '.');
+    
+    char* extendPointer = strrchr(fileName, '.');
     if(extendPointer != NULL)
         strcpy(extend, extendPointer);
-    strncat(tmp, input, extendPointer - input);
+    strcpy(tmp, cwd);
+    strncat(tmp, fileName, extendPointer - fileName);
     strcat(tmp, msg);
     strcat(tmp, extend);
     strcpy(output, tmp);
 }
 
-void doRotate(char* output, char*  degree) {
+void doRotate(char* output, int idx, char*  degree) {
     char tmp[INPUT_LEN];
     strcpy(tmp, output);
     char cmd[INPUT_LEN * 2];
-    addStrBeforeExtend(output, tmp, ".rotate");
+    generateNewFileName(output, strrchr(tmp, '/'), ".rotate");
     sprintf(cmd, "convert -rotate %s %s %s", degree, tmp, output);
-
+    printf("About to execute: %s\n", cmd);
     int pid = fork();
     if(pid == -1) {
         fprintf(stderr, "Fork fails.\n");
@@ -179,7 +185,7 @@ void doRotate(char* output, char*  degree) {
     }
 }
 
-void rotateImages(char* file1, char* file2, char* file3) {
+void rotateImages(int idx) {
     // Get user degreetructions
     char degree[INPUT_LEN * 2];
     bzero(degree, INPUT_LEN * 2);
@@ -193,26 +199,42 @@ void rotateImages(char* file1, char* file2, char* file3) {
         }
     }
     degree[strlen(degree) - 1] = '\0';
+    if(strlen(degree) == 0) {
+        strcpy(degree, "0");
+    }
 
     // Rotate the image
-    doRotate(file1, degree);
-    doRotate(file2, degree);
-    doRotate(file3, degree);
+    doRotate(album[idx].scale10, idx, degree);
+    doRotate(album[idx].scale50, idx, degree);
 }
 
 void captioningImage(char* caption, int idx) {
     printf("Type in caption of this image (or skip captioning by simply hitting enter):");
     fgets(caption, INPUT_LEN - 1, stdin);
-    printf("Captioning %dth done\n", idx);
+    if(strlen(caption) <= 1 || caption[0] == '\n' || caption[0] == '\r') {
+        strcpy(album[idx].caption, "<No title>");
+    } else {
+        caption[strlen(caption) - 1] = '\0';
+        strcpy(album[idx].caption, caption);
+    }
+    printf("Captioning %s as '%s' done\n", strrchr(album[idx].origin, '/') + 1, album[idx].caption);
 }
 
-int scaleImageOutof100(char* output, char* file, int percent) {
+int scaleImageOutof100(int idx, int percent) {
     char cmd[INPUT_LEN * 2], scale[INPUT_LEN], percString[INPUT_LEN];
+    char* output;
+    if(percent == 10) {
+        output = album[idx].scale10;
+    } else {
+        output = album[idx].scale50;
+    }
+    char* file = album[idx].origin;
+
     sprintf(scale, ".scale%d", percent);
     sprintf(percString, "%d%%", percent);
-    addStrBeforeExtend(output, file, scale);
+    generateNewFileName(output, strrchr(album[idx].origin, '/'), scale);
     sprintf(cmd, "convert -geometry %s %s %s", percString, file, output);
-    
+    printf("About to execute: %s\n", cmd);
     int pid = fork();
     if(pid == -1) {
         fprintf(stderr, "Fork fails.\n");
@@ -223,6 +245,23 @@ int scaleImageOutof100(char* output, char* file, int percent) {
         execl (cmd, cmd, "-geometry", percString, file, output, NULL);
         fprintf(stderr, "Error when execl(%s) with errno: %s \n", cmd, strerror(errno));
         _exit (EXIT_FAILURE);
+    }
+}
+
+void generateHtml() {
+    int i;
+    char output[INPUT_LEN * albumSize * 2];
+    FILE* fp = fopen("album.html", "w");
+    if(fp != NULL) {
+        fputs(header, fp);
+        for(i = 0; i < albumSize; i++) {
+            char item[INPUT_LEN];
+            sprintf(item, "<h2>%s</h2>\
+<a href=\"%s\"><img src=\"%s\" border=\"1\"></a>\
+</body></html>", album[i].caption, album[i].scale50, album[i].scale10);
+            fputs(item, fp);
+        }    
+        fclose(fp);
     }
 }
 
@@ -244,11 +283,12 @@ int main(int argc, char * argv[]) {
     for(i = 0; i < albumSize; i++) {
         int pid1, pid2, stat1, stat2;
         printf("Processing image: %s\n", inputPhotos[i]);
-        strcpy(album[i].origin, inputPhotos[i]);
+        strcpy(album[i].origin, directoryName);
+        strcat(album[i].origin, inputPhotos[i]);
         
         // Scale the image
-        pid1 = scaleImageOutof100(album[i].scale50, inputPhotos[i], 50);
-        pid2 = scaleImageOutof100(album[i].scale10, inputPhotos[i], 10);
+        pid1 = scaleImageOutof100(i, 25);
+        pid2 = scaleImageOutof100(i, 10);
     
         // Dsiplay thunmnail
         waitpid(pid1, &stat1, NULL);
@@ -256,9 +296,23 @@ int main(int argc, char * argv[]) {
         displayImages(album[i].scale10);
 
         // Rotate if needed
-        rotateImages(album[i].origin, album[i].scale50, album[i].scale10);
+        rotateImages(i);
         
         // Caption it if needed
         captioningImage(album[i].caption, i);
+
+        printf("\n----------------------------------------------\n");
     }
+
+    // Generate html file
+    generateHtml();
+
+    // Free the memory
+    for(i = 0; i < albumSize; i++) {
+        free(inputPhotos[i]);
+    }
+    free(album);
+    free(inputPhotos);
+    album = NULL;
+    inputPhotos = NULL;
 }

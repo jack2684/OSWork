@@ -287,7 +287,7 @@ int main(int argc, char * argv[]) {
         strcat(album[i].origin, inputPhotos[i]);
         
         // Scale the image
-        pid1 = scaleImageOutof100(i, 50);
+        pid1 = scaleImageOutof100(i, 25);
         pid2 = scaleImageOutof100(i, 10);
     
         // Dsiplay thunmnail

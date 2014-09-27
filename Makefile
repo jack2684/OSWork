@@ -1,11 +1,11 @@
 .SUFFIXES: .c
 
-SRCS = src/album.c
+SRCS = src/bridge.c
 OBJS = $(SRCS:.c=.o)
-OUTPUT = album
+OUTPUT = bridge
 
 CC = gcc
-CFLAGS = -g -pthread
+CFLAGS = -g -lpthread -m32
 LIBS = 
 
 demo: $(OBJS)
