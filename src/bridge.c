@@ -41,30 +41,25 @@ void printOutsideLock() {
         exit(-1);
     }
     
-    // Checking stats
-    if(car > maxCar) {
-        fprintf(stderr, "#Cars on bridge %d overflow %d\n", car, maxCar);
-    } 
-    if(car < 0) {
-        fprintf(stderr, "#Cars on bridge %d is negative\n", car);
-    }
-    if(car < maxCar) {
+/*    if(car < maxCar) {
         if(flow > 0 && n2h > 0) {
             fprintf(stderr, "#Cars on bridge %d < %d, with %d remaining cars waiting to go to Hanvoer\n", car, maxCar, n2h);
         }
         if(flow < 0 && h2n > 0) {
             fprintf(stderr, "#Cars on bridge %d < %d, with %d remaining cars waiting to go to Norwich\n", car, maxCar, h2n);
         }
+    
     }
+    */
     
     // Printing
-    char hanover[INPUT_LEN] = "[Hanover: ";
-    char norwich[INPUT_LEN] = "[Norwich: ";
-    char bridge[INPUT_LEN] = "[Bridge: ";
+    char hanover[INPUT_LEN] = "[";
+    char norwich[INPUT_LEN] = "[";
+    char bridge[INPUT_LEN] = "[";
     char item[INPUT_LEN];
     int i;
     for(i = 0; i < totalCars; i++) {
-        sprintf(item, "(%d,%s)", cars[i].id, cars[i].dir == 1 ? "->" : "<-");
+        sprintf(item, "(%s%d%s)",  cars[i].dir == -1 ? "<-" : "", cars[i].id, cars[i].dir == -1 ? "" : "->");
         switch(cars[i].loc) {
             case NORWICH:
                 strcat(norwich, item);
@@ -82,8 +77,16 @@ void printOutsideLock() {
     strcat(norwich, "]");
     strcat(hanover, "]");
     strcat(bridge, "]");
-    printf("%s %s %s\n", norwich, bridge, hanover);
+    printf("\t\t\t%s                                %s                                %s\n", norwich, bridge, hanover);
 
+    // Checking stats
+    if(car > maxCar) {
+        fprintf(stderr, "#Cars on bridge %d overflow %d\n", car, maxCar);
+    } 
+    if(car < 0) {
+        fprintf(stderr, "#Cars on bridge %d is negative\n", car);
+    }
+    
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
     if(rc) {
@@ -110,7 +113,6 @@ void exitBridge(car_t* aCar) {
 
     // Update stats
     car--;
-    aCar->loc += aCar->dir;
 
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
@@ -118,7 +120,7 @@ void exitBridge(car_t* aCar) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
     }
-    printOutsideLock();
+    //printOutsideLock();
 }
 
 void onBridge(car_t* aCar) {
@@ -129,7 +131,6 @@ void onBridge(car_t* aCar) {
 
 void arriveBridge(car_t* aCar) {
     int rc, enterTheBridge = 0;
-    printOutsideLock();
 
     while(!enterTheBridge) {
         // Lock the share resource
@@ -142,15 +143,12 @@ void arriveBridge(car_t* aCar) {
         // Read and perceive the locked resource       
         if(car == 0) {
             enterTheBridge = 1;
-        } else if(car <= maxCar) {
-            if(flow == aCar->dir) {
-                enterTheBridge = 1;
-            }
+        } else if(car < maxCar && flow == aCar->dir) {
+            enterTheBridge = 1;
         }
 
         // Write the locked resource if necessary
         if(enterTheBridge) {
-            deQueueWithinLock(aCar);
             flow = aCar->dir;
             car++;
             aCar->loc += aCar->dir;
@@ -188,6 +186,7 @@ int main(int argc, char *argv[]) {
     cars = (car_t*) malloc(sizeof(car_t) * totalCars);
 
     // Start the children threads
+    printf("Initial value: Norwich (%d cars) | Bridge (max load %d) | Hanover (%d cars) \n", n2h, maxCar, h2n);
     for(i = 0; i < totalCars; i++) {
         cars[i].id = i;
         if(i < n2h) {
