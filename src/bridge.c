@@ -59,7 +59,8 @@ void printOutsideLock() {
             case HANOVER:
                 hCnt++;
                 sprintf(item, "(%d)", cars[i].id);
-                strcat(hanover, item);
+                strcat(item, hanover);
+                strcpy(hanover, item);
                 break;
             case BRIDGE:
                 bCnt++;
@@ -75,7 +76,14 @@ void printOutsideLock() {
         strcpy(bEmpty, "\tBridge is empty!");
     }
     while(bCnt < maxCar) {
-        strcat(bridge, "      ");
+        if(flow == -1) {
+            char tmp[INPUT_LEN];
+            strcpy(tmp, "      ");
+            strcat(tmp, bridge);
+            strcpy(bridge, tmp);
+        } else {
+            strcat(bridge, "      ");
+        }
         bCnt++;
     }
     strcat(norwich, "");
