@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
+#include <time.h>
 #include <pthread.h>   // for threads
 #include <semaphore.h> // for semaphores
 
@@ -20,6 +20,7 @@
 #define NORWICH 0
 #define BRIDGE 1
 #define HANOVER 2
+#define SCALE 100000
 
 #  define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP \
   { { 0, 0, 0, PTHREAD_MUTEX_ERRORCHECK_NP, 0, { 0 } } }
@@ -31,7 +32,7 @@ typedef struct CAR {
 } car_t;
 
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-int maxCar, n2h, h2n, flow = 0, car = 0, totalCars;
+int maxCar, n2h, h2n, flow = 0, car = 0, totalCars, cross = 0;
 car_t* cars;
 
 void printOutsideLock() {
@@ -41,43 +42,46 @@ void printOutsideLock() {
         exit(-1);
     }
     
-/*    if(car < maxCar) {
-        if(flow > 0 && n2h > 0) {
-            fprintf(stderr, "#Cars on bridge %d < %d, with %d remaining cars waiting to go to Hanvoer\n", car, maxCar, n2h);
-        }
-        if(flow < 0 && h2n > 0) {
-            fprintf(stderr, "#Cars on bridge %d < %d, with %d remaining cars waiting to go to Norwich\n", car, maxCar, h2n);
-        }
-    
-    }
-    */
-    
     // Printing
-    char hanover[INPUT_LEN] = "[";
-    char norwich[INPUT_LEN] = "[";
-    char bridge[INPUT_LEN] = "[";
+    char hanover[INPUT_LEN] = "";
+    char norwich[INPUT_LEN] = "";
+    char bridge[INPUT_LEN] = "";
     char item[INPUT_LEN];
-    int i;
-    for(i = 0; i < totalCars; i++) {
-        sprintf(item, "(%s%d%s)",  cars[i].dir == -1 ? "<-" : "", cars[i].id, cars[i].dir == -1 ? "" : "->");
+    int i, hCnt = 0, nCnt = 0, bCnt = 0;
+    for(i = 0; i < INPUT_LEN; i++) {
         switch(cars[i].loc) {
             case NORWICH:
+                nCnt++;
+                sprintf(item, "(%d)", cars[i].id);
                 strcat(norwich, item);
                 break;
             case HANOVER:
+                hCnt++;
+                sprintf(item, "(%d)", cars[i].id);
                 strcat(hanover, item);
                 break;
             case BRIDGE:
+                bCnt++;
+                sprintf(item, "(%s%d%s)",  cars[i].dir == -1 ? "<-" : "", cars[i].id, cars[i].dir == -1 ? "" : "->");
                 strcat(bridge, item);
                 break;
             default:
                 break;
         }
     }
-    strcat(norwich, "]");
-    strcat(hanover, "]");
-    strcat(bridge, "]");
-    printf("\t\t\t%s                                %s                                %s\n", norwich, bridge, hanover);
+    char bEmpty[INPUT_LEN];
+    if(bCnt == 0) {
+        strcpy(bEmpty, "\tBridge is empty!");
+    }
+    while(bCnt < maxCar) {
+        strcat(bridge, "      ");
+        bCnt++;
+    }
+    strcat(norwich, "");
+    strcat(hanover, "");
+    strcat(bridge, "");
+    printf("%d [%s] %d%s\n", nCnt, bridge, hCnt, bEmpty);
+    //printf("%s\n%s\n%s\n", norwich, bridge, hanover);
 
     // Checking stats
     if(car > maxCar) {
@@ -92,14 +96,6 @@ void printOutsideLock() {
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
-    }
-}
-
-void deQueueWithinLock(car_t* aCar) {
-    if(aCar->dir > 0) {
-        n2h--;
-    } else {
-        h2n--;
     }
 }
 
@@ -120,12 +116,12 @@ void exitBridge(car_t* aCar) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
     }
-    //printOutsideLock();
+    // printOutsideLock();
 }
 
 void onBridge(car_t* aCar) {
-    sleep(1);
-    aCar->loc += aCar->dir;
+    usleep(SCALE * cross);
+    aCar->loc += aCar->dir * 10; // in order to step way out of the bridge
     printOutsideLock();
 }
 
@@ -141,7 +137,7 @@ void arriveBridge(car_t* aCar) {
         }
 
         // Read and perceive the locked resource       
-        if(car == 0) {
+        if(car == 0 && aCar->dir != flow) {
             enterTheBridge = 1;
         } else if(car < maxCar && flow == aCar->dir) {
             enterTheBridge = 1;
@@ -174,38 +170,41 @@ void* oneVehicle(car_t* aCar) {
 int main(int argc, char *argv[]) {
     int rc, i; 
     if(argc != 4) {
-        printf("brdige usage: ./bridge <#maxCar on the bridge> <#cars to Hanover> <#car to Norwich>\n");
+        printf("brdige usage: ./bridge <#maxCar on the bridge> <car prob to Hanover (0~100)> <car prob to Norwich (0~100)>\n");
         return;
     } else {
         maxCar = atoi(argv[1]);
         n2h = atoi(argv[2]);
+        cross = 2;
         h2n = atoi(argv[3]);
     }
-    totalCars = n2h + h2n;
-    pthread_t* carThreads = (pthread_t*) malloc(sizeof(pthread_t) * totalCars);
-    cars = (car_t*) malloc(sizeof(car_t) * totalCars);
+    cars = (car_t*) malloc(sizeof(car_t) * INPUT_LEN);
+    for(i = 0; i < INPUT_LEN; i++) {
+        cars[i].loc = -1;
+    }
 
     // Start the children threads
-    printf("Initial value: Norwich (%d cars) | Bridge (max load %d) | Hanover (%d cars) \n", n2h, maxCar, h2n);
-    for(i = 0; i < totalCars; i++) {
-        cars[i].id = i;
-        if(i < n2h) {
-            cars[i].dir = 1;
-            cars[i].loc = NORWICH;
-            rc = pthread_create(&carThreads[i], NULL, oneVehicle, cars + i);
-        } else {
-            cars[i].dir = -1;
-            cars[i].loc = HANOVER;
-            rc = pthread_create(&carThreads[i], NULL, oneVehicle, cars + i);
+    srand(time(NULL));
+    i = 0;
+    while(1) {
+        if((rand() % 100) < n2h ) {
+            cars[i % INPUT_LEN].loc = NORWICH;
+            cars[i % INPUT_LEN].id = i;
+            cars[i % INPUT_LEN].dir = 1;
+            pthread_t* carThread = (pthread_t*) malloc(sizeof(pthread_t));
+            pthread_create(carThread, NULL, oneVehicle, cars + (i % INPUT_LEN));
+            i++;
         }
+        if((rand() % 100) < h2n ) {
+            cars[i % INPUT_LEN].loc = HANOVER;
+            cars[i % INPUT_LEN].id = i;
+            cars[i % INPUT_LEN].dir = -1;
+            pthread_t* carThread = (pthread_t*) malloc(sizeof(pthread_t));
+            pthread_create(carThread, NULL, oneVehicle, cars + (i % INPUT_LEN));
+            i++;
+        }
+        usleep(SCALE);
     }
-
-    // Wait till the end
-    for(i = 0; i < totalCars; i++) {
-        rc = pthread_join(carThreads[i], NULL);
-        printf("%dth child is done\n", i);
-    }
-    printf("Simulation complete.\n");
     return 0;
 }
   
