@@ -49,6 +49,7 @@ void printOutsideLock() {
     char bridge[INPUT_LEN] = "";
     char item[INPUT_LEN];
     int i, hCnt = 0, nCnt = 0, bCnt = 0;
+    bzero(bridge, INPUT_LEN);
     for(i = 0; i < INPUT_LEN; i++) {
         switch(cars[i].loc) {
             case NORWICH:
@@ -72,6 +73,7 @@ void printOutsideLock() {
         }
     }
     char bEmpty[INPUT_LEN];
+    bzero(bEmpty, INPUT_LEN);
     if(bCnt == 0) {
         strcpy(bEmpty, "\tBridge is empty!");
     }
@@ -99,7 +101,9 @@ void printOutsideLock() {
     if(car < 0) {
         fprintf(stderr, "#Cars on bridge %d is negative\n", car);
     }
-    
+
+    printf("Cars NO: %d\n", car);
+
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
     if(rc) {
@@ -127,6 +131,7 @@ void exitBridge(car_t* aCar) {
     }
 
     // Update condition and signal for anyone that might be waiting
+    aCar->loc += aCar->dir * 10; // in order to step way out of the bridge
     car--;
     rc = pthread_cond_broadcast(&bridgeCondition);
     if(rc) {
@@ -140,13 +145,12 @@ void exitBridge(car_t* aCar) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
     }
-    // printOutsideLock();
+    printOutsideLock();
 }
 
 void onBridge(car_t* aCar) {
     usleep(SCALE * cross);
-    aCar->loc += aCar->dir * 10; // in order to step way out of the bridge
-    printOutsideLock();
+    // printOutsideLock();
 }
 
 void arriveBridge(car_t* aCar) {
@@ -224,7 +228,7 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
-                exit(-1);
+                //exit(-1);
             }
             i++;
         }
@@ -235,11 +239,11 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
-                exit(-1);
+               // exit(-1);
             }
             i++;
         }
-        usleep(SCALE);
+        usleep(SCALE / 2);
     }
     return 0;
 }
