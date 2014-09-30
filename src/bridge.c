@@ -12,9 +12,9 @@
 #include <fcntl.h>
 #include <time.h>
 #include <pthread.h>   // for threads
-#include <semaphore.h> // for semaphores
-
 #include <unistd.h>
+#include <errno.h>
+#include <signal.h> 
 
 #define INPUT_LEN 1024
 #define NORWICH 0
@@ -128,7 +128,11 @@ void exitBridge(car_t* aCar) {
 
     // Update condition and signal for anyone that might be waiting
     car--;
-    pthread_cond_broadcast(&bridgeCondition);
+    rc = pthread_cond_broadcast(&bridgeCondition);
+    if(rc) {
+        printf("Condition broadcast by %d fails\n", aCar->id);
+        exit(-1);
+    }
 
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
@@ -157,7 +161,11 @@ void arriveBridge(car_t* aCar) {
 
     // Wait if necessary
     while(!safeGo(aCar->dir)) {
-        pthread_cond_wait(&bridgeCondition, &lock);
+        rc = pthread_cond_wait(&bridgeCondition, &lock);
+        if(rc) {
+            printf("Condition wait for %d fails\n", aCar->id);
+            exit(-1);
+        }
     }
 
     // Write the locked resource if necessary
@@ -201,21 +209,34 @@ int main(int argc, char *argv[]) {
     // Start the children threads
     srand(time(NULL));
     i = 0;
+    pthread_attr_t tattr;
+    pthread_attr_init(&tattr);
+    rc = pthread_attr_setdetachstate(&tattr,PTHREAD_CREATE_DETACHED);
+    if(rc) {
+        printf("Setting detach state fails\n");
+    }
     while(1) {
+        pthread_t thread;
         if((rand() % 100) < n2h ) {
             cars[i % INPUT_LEN].loc = NORWICH;
             cars[i % INPUT_LEN].id = i;
             cars[i % INPUT_LEN].dir = 1;
-            pthread_t* carThread = (pthread_t*) malloc(sizeof(pthread_t));
-            pthread_create(carThread, NULL, oneVehicle, cars + (i % INPUT_LEN));
+            rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
+            if(rc) {
+                printf("Create thread for %d fails: %s\n", i, strerror(errno));
+                exit(-1);
+            }
             i++;
         }
         if((rand() % 100) < h2n ) {
             cars[i % INPUT_LEN].loc = HANOVER;
             cars[i % INPUT_LEN].id = i;
             cars[i % INPUT_LEN].dir = -1;
-            pthread_t* carThread = (pthread_t*) malloc(sizeof(pthread_t));
-            pthread_create(carThread, NULL, oneVehicle, cars + (i % INPUT_LEN));
+            rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
+            if(rc) {
+                printf("Create thread for %d fails: %s\n", i, strerror(errno));
+                exit(-1);
+            }
             i++;
         }
         usleep(SCALE);
