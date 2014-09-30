@@ -31,6 +31,7 @@ typedef struct CAR {
     int loc;
 } car_t;
 
+pthread_cond_t bridgeCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 int maxCar, n2h, h2n, flow = 0, car = 0, totalCars, cross = 0;
 car_t* cars;
@@ -99,6 +100,16 @@ void printOutsideLock() {
     }
 }
 
+int safeGo(int dir) {
+    // Read and perceive the locked resource       
+    if(car == 0 && dir != flow) {
+        return 1;
+    } else if(car < maxCar && flow == dir) {
+        return 1;
+    }
+    return 0;
+}
+
 void exitBridge(car_t* aCar) {
     // Lock the share resource
     int rc = pthread_mutex_lock(&lock);
@@ -107,8 +118,9 @@ void exitBridge(car_t* aCar) {
         exit(-1);
     }
 
-    // Update stats
+    // Update condition and signal for anyone that might be waiting
     car--;
+    pthread_cond_broadcast(&bridgeCondition);
 
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
@@ -126,37 +138,32 @@ void onBridge(car_t* aCar) {
 }
 
 void arriveBridge(car_t* aCar) {
-    int rc, enterTheBridge = 0;
+    int rc;
 
-    while(!enterTheBridge) {
-        // Lock the share resource
-        rc = pthread_mutex_lock(&lock);
-        if(rc) {
-            fprintf(stderr, "Lock acquire fails.\n");
-            exit(-1);
-        }
-
-        // Read and perceive the locked resource       
-        if(car == 0 && aCar->dir != flow) {
-            enterTheBridge = 1;
-        } else if(car < maxCar && flow == aCar->dir) {
-            enterTheBridge = 1;
-        }
-
-        // Write the locked resource if necessary
-        if(enterTheBridge) {
-            flow = aCar->dir;
-            car++;
-            aCar->loc += aCar->dir;
-        }
-
-        // Release the lock
-        rc = pthread_mutex_unlock(&lock);
-        if(rc) {
-            fprintf(stderr, "Lock acquire fails.\n");
-            exit(-1);
-        }
+    // Lock the share resource
+    rc = pthread_mutex_lock(&lock);
+    if(rc) {
+        fprintf(stderr, "Lock acquire fails.\n");
+        exit(-1);
     }
+
+    // Wait if necessary
+    while(!safeGo(aCar->dir)) {
+        pthread_cond_wait(&bridgeCondition, &lock);
+    }
+
+    // Write the locked resource if necessary
+    flow = aCar->dir;
+    car++;
+    aCar->loc += aCar->dir;
+    
+    // Release the lock
+    rc = pthread_mutex_unlock(&lock);
+    if(rc) {
+        fprintf(stderr, "Lock acquire fails.\n");
+        exit(-1);
+    }
+    
     printOutsideLock();
 }
 
