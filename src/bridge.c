@@ -31,6 +31,7 @@ typedef struct CAR {
     int loc;
 } car_t;
 
+// I use two separate condition var to avoid unnecessary waking
 pthread_cond_t goHanoverCondition = PTHREAD_COND_INITIALIZER;
 pthread_cond_t goNorwichCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
@@ -138,11 +139,14 @@ void exitBridge(car_t* aCar) {
     }
 
     // Update condition and signal for anyone that might be waiting
+    // This part is very delicate, I try only use signal, but the efficient 
+    // is low when switching the direction on the bridge. Because you may have 
+    // multiple cars waiting to enter the bridge, so I choose to use broadcast
     car--;
     if(aCar->dir == 1) {
-        rc = car == 0 ? pthread_cond_signal(&goNorwichCondition) : pthread_cond_signal(&goHanoverCondition);
+        rc = car == 0 ? pthread_cond_broadcast(&goNorwichCondition) : pthread_cond_signal(&goHanoverCondition);
     } else if (aCar->dir == -1) { 
-        rc = car == 0 ? pthread_cond_signal(&goNorwichCondition) : pthread_cond_signal(&goNorwichCondition);
+        rc = car == 0 ? pthread_cond_broadcast(&goHanoverCondition) : pthread_cond_signal(&goNorwichCondition);
     }
     if(rc) {
         printf("Condition broadcast by %d fails\n", aCar->id);
