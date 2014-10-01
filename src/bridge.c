@@ -35,7 +35,12 @@ typedef struct CAR {
 pthread_cond_t goHanoverCondition = PTHREAD_COND_INITIALIZER;
 pthread_cond_t goNorwichCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-int maxCar, n2h, h2n, flow = 0, car = 0, totalCars, cross = 0;
+int maxCar, car = 0;                                // Max load and curent load
+int n2h, h2n;                                       // The prob on each side
+int hCnt, nCnt;                                     // Queue length on each side
+int flow = 0;                                       // Flow direction on the bridge
+int cross = 0;                                      // Time scale to cross 
+int dirCnt = 0, starvingThreashold, forbidDir = 0;  // Starving control
 car_t* cars;
 
 void padding(char* pad, int n) {
@@ -67,7 +72,9 @@ void printOutsideLock() {
     bzero(bridge, INPUT_LEN);
     bzero(item, INPUT_LEN);
 
-    int i, hCnt = 0, nCnt = 0, bCnt = 0;
+    int i, bCnt = 0;
+    hCnt = 0;
+    nCnt = 0;
     bzero(bridge, INPUT_LEN);
     for(i = 0; i < INPUT_LEN; i++) {
         switch(cars[i].loc) {
@@ -89,9 +96,6 @@ void printOutsideLock() {
     char bEmpty[INPUT_LEN];
     char pad[INPUT_LEN];
     bzero(bEmpty, INPUT_LEN);
-    if(bCnt == 0) {
-        strcpy(bEmpty, "\tBridge is empty!");
-    }
     padding(pad, totalLen - strlen(bridge));
     if(flow == -1) {
         strcat(pad, bridge);
@@ -120,14 +124,33 @@ void printOutsideLock() {
     }
 }
 
-int safeGo(int dir) {
-    // Read and perceive the locked resource       
+int safeGo(car_t* aCar) {
+    int dir = aCar->dir;
+    // Read and perceive the locked resource
+    if(forbidDir == dir) {
+        return 0;
+    } else {
+    }
     if(car == 0) {
         return 1;
     } else if(car < maxCar && flow == dir) {
         return 1;
     }
     return 0;
+}
+
+int switchSide() {
+    int starve = 0;
+    starve |= flow == 1 && hCnt > 0;
+    starve |= flow == -1 && nCnt > 0;
+    starve &= starvingThreashold > 0 && abs(dirCnt) > starvingThreashold;
+    forbidDir = starve ? flow : forbidDir;
+    forbidDir = (!starve && !car) ? flow : forbidDir; 
+    if(starve || !car) {
+        printf("\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s%s\n", starve ? " [STARVE]" : "", !car ? " [EMPTY BRIDGE]" : "");
+        dirCnt = 0;
+    }
+    return starve || !car;
 }
 
 void exitBridge(car_t* aCar) {
@@ -144,9 +167,17 @@ void exitBridge(car_t* aCar) {
     // multiple cars waiting to enter the bridge, so I choose to use broadcast
     car--;
     if(aCar->dir == 1) {
-        rc = car == 0 ? pthread_cond_broadcast(&goNorwichCondition) : pthread_cond_signal(&goHanoverCondition);
+        if(switchSide()) {
+            rc = pthread_cond_broadcast(&goNorwichCondition);
+        } else {
+            rc = pthread_cond_signal(&goHanoverCondition);
+        }
     } else if (aCar->dir == -1) { 
-        rc = car == 0 ? pthread_cond_broadcast(&goHanoverCondition) : pthread_cond_signal(&goNorwichCondition);
+        if(switchSide()) {
+            pthread_cond_broadcast(&goHanoverCondition);
+        } else {
+            rc = pthread_cond_signal(&goNorwichCondition);
+        }
     }
     if(rc) {
         printf("Condition broadcast by %d fails\n", aCar->id);
@@ -182,7 +213,7 @@ void arriveBridge(car_t* aCar) {
     }
 
     // Wait if necessary
-    while(!safeGo(aCar->dir)) {
+    while(!safeGo(aCar)) {
         if(aCar->dir == 1) {
             rc = pthread_cond_wait(&goHanoverCondition, &lock);
         } else if (aCar->dir == -1) {
@@ -195,6 +226,7 @@ void arriveBridge(car_t* aCar) {
     }
 
     // Write the locked resource if necessary
+    dirCnt += aCar->dir;
     aCar->loc += aCar->dir;
     flow = aCar->dir;
     car++;
@@ -217,15 +249,16 @@ void* oneVehicle(car_t* aCar) {
 
 
 int main(int argc, char *argv[]) {
-    int rc, i; 
-    if(argc != 4) {
-        printf("brdige usage: ./bridge <#maxCar on the bridge> <car prob to Hanover (0~100)> <car prob to Norwich (0~100)>\n");
+    int rc, i, j; 
+    if(argc != 5) {
+        printf("brdige usage: ./bridge <#maxCar on the bridge> <car prob to Hanover (0~100)> <car prob to Norwich (0~100)> <starving threshold>\n");
         return;
     } else {
         maxCar = atoi(argv[1]);
         n2h = atoi(argv[2]);
         cross = 2;
         h2n = atoi(argv[3]);
+        starvingThreashold = atoi(argv[4]);
     }
     cars = (car_t*) malloc(sizeof(car_t) * INPUT_LEN);
     for(i = 0; i < INPUT_LEN; i++) {
@@ -237,6 +270,7 @@ int main(int argc, char *argv[]) {
     // Start simulation
     srand(time(NULL));
     i = 0;
+    j = 0;
     pthread_attr_t tattr;
     pthread_attr_init(&tattr);
     rc = pthread_attr_setdetachstate(&tattr,PTHREAD_CREATE_DETACHED); // Set detach attribute
@@ -269,7 +303,7 @@ int main(int argc, char *argv[]) {
             }
             i++;
         }
-        usleep(SCALE / 2);
+        usleep(SCALE / 4);
     }
     free(cars);
     cars = NULL;
