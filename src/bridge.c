@@ -37,8 +37,20 @@ pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 int maxCar, n2h, h2n, flow = 0, car = 0, totalCars, cross = 0;
 car_t* cars;
 
+void padding(char* pad, int n) {
+    pad[0] = '\0';
+    while(n--) {
+        if(strlen(pad) == 0) {
+            strcpy(pad, " ");
+        } else {
+            strcat(pad, " ");
+        }
+    }
+}
+
 void printOutsideLock() {
     int rc = pthread_mutex_lock(&lock);
+    int totalLen = maxCar * 8;
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -74,20 +86,17 @@ void printOutsideLock() {
         }
     }
     char bEmpty[INPUT_LEN];
+    char pad[INPUT_LEN];
     bzero(bEmpty, INPUT_LEN);
     if(bCnt == 0) {
         strcpy(bEmpty, "\tBridge is empty!");
     }
-    while(bCnt < maxCar) {
-        if(flow == -1) {
-            char tmp[INPUT_LEN];
-            strcpy(tmp, "      ");
-            strcat(tmp, bridge);
-            strcpy(bridge, tmp);
-        } else {
-            strcat(bridge, "      ");
-        }
-        bCnt++;
+    padding(pad, totalLen - strlen(bridge));
+    if(flow == -1) {
+        strcat(pad, bridge);
+        strcpy(bridge, pad);
+    } else {
+        strcat(bridge, pad);
     }
     strcat(norwich, "");
     strcat(hanover, "");
@@ -239,6 +248,8 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
+                printf("Too many threads are jaming at waiting queue.\n");
+                exit(-1);
             }
             i++;
         }
@@ -249,6 +260,8 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
+                printf("Too many threads are jaming at waiting queue.\n");
+                exit(-1);
             }
             i++;
         }
@@ -259,7 +272,3 @@ int main(int argc, char *argv[]) {
     return 0;
 }
   
-
-
-
-
