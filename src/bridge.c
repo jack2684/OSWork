@@ -48,20 +48,25 @@ void printOutsideLock() {
     char norwich[INPUT_LEN] = "";
     char bridge[INPUT_LEN] = "";
     char item[INPUT_LEN];
+    bzero(hanover, INPUT_LEN);
+    bzero(norwich, INPUT_LEN);
+    bzero(bridge, INPUT_LEN);
+    bzero(item, INPUT_LEN);
+
     int i, hCnt = 0, nCnt = 0, bCnt = 0;
     bzero(bridge, INPUT_LEN);
     for(i = 0; i < INPUT_LEN; i++) {
         switch(cars[i].loc) {
             case NORWICH:
                 nCnt++;
-                sprintf(item, "(%d)", cars[i].id);
-                strcat(norwich, item);
+                //sprintf(item, "(%d)", cars[i].id);
+                //strcat(norwich, item);
                 break;
             case HANOVER:
                 hCnt++;
-                sprintf(item, "(%d)", cars[i].id);
-                strcat(item, hanover);
-                strcpy(hanover, item);
+                //sprintf(item, "(%d)", cars[i].id);
+                //strcat(item, hanover);
+                //strcpy(hanover, item);
                 break;
             case BRIDGE:
                 bCnt++;
@@ -102,8 +107,6 @@ void printOutsideLock() {
         fprintf(stderr, "#Cars on bridge %d is negative\n", car);
     }
 
-    printf("Cars NO: %d\n", car);
-
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
     if(rc) {
@@ -131,14 +134,16 @@ void exitBridge(car_t* aCar) {
     }
 
     // Update condition and signal for anyone that might be waiting
-    aCar->loc += aCar->dir * 10; // in order to step way out of the bridge
+    aCar->loc = -1;
+    aCar->dir = 0;
+    aCar->id = -1;
     car--;
     rc = pthread_cond_broadcast(&bridgeCondition);
     if(rc) {
         printf("Condition broadcast by %d fails\n", aCar->id);
         exit(-1);
     }
-
+    
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
     if(rc) {
@@ -208,6 +213,8 @@ int main(int argc, char *argv[]) {
     cars = (car_t*) malloc(sizeof(car_t) * INPUT_LEN);
     for(i = 0; i < INPUT_LEN; i++) {
         cars[i].loc = -1;
+        cars[i].dir = 0;
+        cars[i].id = -1;
     }
 
     // Start the children threads
