@@ -31,7 +31,8 @@ typedef struct CAR {
     int loc;
 } car_t;
 
-pthread_cond_t bridgeCondition = PTHREAD_COND_INITIALIZER;
+pthread_cond_t goHanoverCondition = PTHREAD_COND_INITIALIZER;
+pthread_cond_t goNorwichCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 int maxCar, n2h, h2n, flow = 0, car = 0, totalCars, cross = 0;
 car_t* cars;
@@ -59,14 +60,9 @@ void printOutsideLock() {
         switch(cars[i].loc) {
             case NORWICH:
                 nCnt++;
-                //sprintf(item, "(%d)", cars[i].id);
-                //strcat(norwich, item);
                 break;
             case HANOVER:
                 hCnt++;
-                //sprintf(item, "(%d)", cars[i].id);
-                //strcat(item, hanover);
-                //strcpy(hanover, item);
                 break;
             case BRIDGE:
                 bCnt++;
@@ -97,7 +93,6 @@ void printOutsideLock() {
     strcat(hanover, "");
     strcat(bridge, "");
     printf("%d [%s] %d%s\n", nCnt, bridge, hCnt, bEmpty);
-    //printf("%s\n%s\n%s\n", norwich, bridge, hanover);
 
     // Checking stats
     if(car > maxCar) {
@@ -117,7 +112,7 @@ void printOutsideLock() {
 
 int safeGo(int dir) {
     // Read and perceive the locked resource       
-    if(car == 0 && dir != flow) {
+    if(car == 0) {
         return 1;
     } else if(car < maxCar && flow == dir) {
         return 1;
@@ -134,16 +129,22 @@ void exitBridge(car_t* aCar) {
     }
 
     // Update condition and signal for anyone that might be waiting
-    aCar->loc = -1;
-    aCar->dir = 0;
-    aCar->id = -1;
     car--;
-    rc = pthread_cond_broadcast(&bridgeCondition);
+    if(aCar->dir == 1) {
+        rc = car == 0 ? pthread_cond_signal(&goNorwichCondition) : pthread_cond_signal(&goHanoverCondition);
+    } else if (aCar->dir == -1) { 
+        rc = car == 0 ? pthread_cond_signal(&goNorwichCondition) : pthread_cond_signal(&goNorwichCondition);
+    }
     if(rc) {
         printf("Condition broadcast by %d fails\n", aCar->id);
         exit(-1);
     }
     
+    // Reset car state
+    aCar->loc = -1;
+    aCar->dir = 0;
+    aCar->id = -1;
+
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
     if(rc) {
@@ -155,7 +156,6 @@ void exitBridge(car_t* aCar) {
 
 void onBridge(car_t* aCar) {
     usleep(SCALE * cross);
-    // printOutsideLock();
 }
 
 void arriveBridge(car_t* aCar) {
@@ -170,17 +170,21 @@ void arriveBridge(car_t* aCar) {
 
     // Wait if necessary
     while(!safeGo(aCar->dir)) {
-        rc = pthread_cond_wait(&bridgeCondition, &lock);
+        if(aCar->dir == 1) {
+            rc = pthread_cond_wait(&goHanoverCondition, &lock);
+        } else if (aCar->dir == -1) {
+            rc = pthread_cond_wait(&goNorwichCondition, &lock);
+        }
         if(rc) {
-            printf("Condition wait for %d fails\n", aCar->id);
+            printf("Condition wait for %d fails: %s\n", aCar->id, strerror(errno));
             exit(-1);
         }
     }
 
     // Write the locked resource if necessary
+    aCar->loc += aCar->dir;
     flow = aCar->dir;
     car++;
-    aCar->loc += aCar->dir;
     
     // Release the lock
     rc = pthread_mutex_unlock(&lock);
@@ -217,12 +221,12 @@ int main(int argc, char *argv[]) {
         cars[i].id = -1;
     }
 
-    // Start the children threads
+    // Start simulation
     srand(time(NULL));
     i = 0;
     pthread_attr_t tattr;
     pthread_attr_init(&tattr);
-    rc = pthread_attr_setdetachstate(&tattr,PTHREAD_CREATE_DETACHED);
+    rc = pthread_attr_setdetachstate(&tattr,PTHREAD_CREATE_DETACHED); // Set detach attribute
     if(rc) {
         printf("Setting detach state fails\n");
     }
@@ -235,7 +239,6 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
-                //exit(-1);
             }
             i++;
         }
@@ -246,12 +249,13 @@ int main(int argc, char *argv[]) {
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
-               // exit(-1);
             }
             i++;
         }
         usleep(SCALE / 2);
     }
+    free(cars);
+    cars = NULL;
     return 0;
 }
   
