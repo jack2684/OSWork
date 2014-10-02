@@ -263,7 +263,7 @@ int main(int argc, char *argv[]) {
     } else {
         maxCar = atoi(argv[1]);
         n2h = atoi(argv[2]);
-        cross = 2;
+        cross = 4;
         h2n = atoi(argv[3]);
         starvingThreashold = atoi(argv[4]);
     }
@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
             }
             i++;
         }
-        usleep(SCALE / 6);
+        usleep(SCALE / 2);
     }
     free(cars);
     cars = NULL;
