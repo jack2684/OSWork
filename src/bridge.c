@@ -15,11 +15,16 @@
 #include <unistd.h>
 #include <errno.h>
 
+// Usual stuff
 #define INPUT_LEN 1024
+#define SCALE 100000
+
+// Locations
 #define NORWICH 0
 #define BRIDGE 1
 #define HANOVER 2
-#define SCALE 100000
+
+// Directions
 #define TOHANOVER 1
 #define TONORWICH -1
 #define TOEITHER 0
@@ -114,9 +119,7 @@ void printOutsideLock() {
                 break;
         }
     }
-    char bEmpty[INPUT_LEN];
     char pad[INPUT_LEN];
-    bzero(bEmpty, INPUT_LEN);
     padding(pad, totalLen - strlen(bridge));
     if(flow == TONORWICH) {
         strcat(pad, bridge);
@@ -127,7 +130,12 @@ void printOutsideLock() {
     strcat(norwich, "");
     strcat(hanover, "");
     strcat(bridge, "");
-    printf("\t\t%d [%s] %d%s\n", nCnt, bridge, hCnt, bEmpty);
+    if(bCnt) {
+        printf("               %d [%s] %d\n", nCnt, bridge, hCnt);
+    } else {
+        printf("[EMPTY BRIDGE] %d [%s] %d\n", nCnt, bridge, hCnt);
+    } 
+
 
     // Checking stats
     if(car > maxCar) {
@@ -148,7 +156,6 @@ int safeGo(car_t* aCar) {
     // Read and perceive the locked resource
     if(forbidDir == dir) {
         return 0;
-    } else {
     }
     if(car == 0) {
         return 1;
@@ -163,14 +170,14 @@ int switchSide() {
     int starve = starvingThreashold > 0 && abs(dirCnt) > starvingThreashold;
     if(starve || !car) {
         forbidDir = flow;
-        printf("%s%s\n", starve ? "[STARVE WARNING]" : "", !car ? "[EMPTY BRIDGE]" : "");
-        dirCnt = 0;
         
-        // Check for false positive
+        // If no car on the other side, don't take side
         if((forbidDir == TOHANOVER && !hCnt) || (forbidDir == TONORWICH && !nCnt)) {
             forbidDir = 0;
             return 0;
         } else {
+            // printf("%s%s\n", starve ? "[STARVE WARNING]" : "", !car ? "[EMPTY BRIDGE]" : "");
+            dirCnt = 0;
             return 1;
         }
     }
@@ -248,7 +255,7 @@ void arriveBridge(car_t* aCar) {
         }
     }
 
-    // Write the locked resource if necessary
+    // Do critical things
     dirCnt += aCar->dir;
     aCar->loc += aCar->dir;
     flow = aCar->dir;
@@ -310,6 +317,7 @@ int main(int argc, char *argv[]) {
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
                 printf("Too many threads are jaming at waiting queue.\n");
+                free(cars);
                 exit(-1);
             }
             i++;
@@ -322,14 +330,15 @@ int main(int argc, char *argv[]) {
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
                 printf("Too many threads are jaming at waiting queue.\n");
+                free(cars);
                 exit(-1);
             }
             i++;
         }
         usleep(SCALE / 6);
     }
-    free(cars);
-    cars = NULL;
+
+    // Never reached
     return 0;
 }
   
