@@ -149,15 +149,16 @@ int switchSide() {
         forbidDir = flow;
         printf("%s%s\n", starve ? "[STARVE WARNING]" : "", !car ? "[EMPTY BRIDGE]" : "");
         dirCnt = 0;
+        
+        // Check for false positive
+        if((forbidDir == TOHANOVER && !hCnt) || (forbidDir == TONORWICH && !nCnt)) {
+            forbidDir = 0;
+            return 0;
+        } else {
+            return 1;
+        }
     }
-
-    // Prevent false positive
-    if((forbidDir == TOHANOVER && !hCnt)
-        || (forbidDir == TONORWICH && !nCnt)) {
-        forbidDir = 0;
-    }
-
-    return starve || !car;
+    return 0;
 }
 
 void exitBridge(car_t* aCar) {
@@ -169,9 +170,8 @@ void exitBridge(car_t* aCar) {
     }
 
     // Update condition and signal for anyone that might be waiting
-    // This part is very delicate, I try only use signal, but the efficient 
-    // is low when switching the direction on the bridge. Because you may have 
-    // multiple cars waiting to enter the bridge, so I choose to use broadcast
+    // This part is dvery delicate,
+    // For the cars on the same side I use signal, for those on the other side I use broadcast
     car--;
     if(aCar->dir == TOHANOVER) {
         if(switchSide()) {
