@@ -14,7 +14,6 @@
 #include <pthread.h>   // for threads
 #include <unistd.h>
 #include <errno.h>
-#include <signal.h> 
 
 #define INPUT_LEN 1024
 #define NORWICH 0
@@ -49,7 +48,12 @@ int release(pthread_mutex_t* lock) {
 int start(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg) {
     return  pthread_create(thread, attr, start_routine, arg);
 }
-
+int broadcast(pthread_cond_t* cVar) {
+    return pthread_cond_broadcast(cVar);
+}
+int signal(pthread_cond_t* cVar) {
+    return pthread_cond_signal(cVar);
+}
 
 // Bridge states
 int maxCar, car = 0;                                // Max load and curent load
@@ -187,15 +191,15 @@ void exitBridge(car_t* aCar) {
     car--;
     if(aCar->dir == TOHANOVER) {
         if(switchSide()) {
-            rc = pthread_cond_broadcast(&goNorwichCondition);
+            rc = broadcast(&goNorwichCondition);
         } else {
-            rc = pthread_cond_signal(&goHanoverCondition);
+            rc = signal(&goHanoverCondition);
         }
     } else if (aCar->dir == -1) { 
         if(switchSide()) {
-            rc = pthread_cond_broadcast(&goHanoverCondition);
+            rc = broadcast(&goHanoverCondition);
         } else {
-            rc = pthread_cond_signal(&goNorwichCondition);
+            rc = signal(&goNorwichCondition);
         }
     }
     if(rc) {
