@@ -21,6 +21,9 @@
 #define BRIDGE 1
 #define HANOVER 2
 #define SCALE 100000
+#define TOHANOVER 1
+#define TONORWICH -1
+#define TOEITHER 0
 
 #  define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP \
   { { 0, 0, 0, PTHREAD_MUTEX_ERRORCHECK_NP, 0, { 0 } } }
@@ -38,7 +41,7 @@ pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 int maxCar, car = 0;                                // Max load and curent load
 int n2h, h2n;                                       // The prob on each side
 int hCnt, nCnt;                                     // Queue length on each side
-int flow = 0;                                       // Flow direction on the bridge
+int flow = TOEITHER;                                // Flow direction on the bridge
 int cross = 0;                                      // Time scale to cross 
 int dirCnt = 0, starvingThreashold, forbidDir = 0;  // Starving control
 car_t* cars;
@@ -97,7 +100,7 @@ void printOutsideLock() {
     char pad[INPUT_LEN];
     bzero(bEmpty, INPUT_LEN);
     padding(pad, totalLen - strlen(bridge));
-    if(flow == -1) {
+    if(flow == TONORWICH) {
         strcat(pad, bridge);
         strcpy(bridge, pad);
     } else {
@@ -106,7 +109,7 @@ void printOutsideLock() {
     strcat(norwich, "");
     strcat(hanover, "");
     strcat(bridge, "");
-    printf("%d [%s] %d%s\n", nCnt, bridge, hCnt, bEmpty);
+    printf("\t\t%d [%s] %d%s\n", nCnt, bridge, hCnt, bEmpty);
 
     // Checking stats
     if(car > maxCar) {
@@ -140,16 +143,20 @@ int safeGo(car_t* aCar) {
 }
 
 int switchSide() {
-    int starve = 0;
-    starve |= flow == 1 && hCnt > 0;
-    starve |= flow == -1 && nCnt > 0;
-    starve &= starvingThreashold > 0 && abs(dirCnt) > starvingThreashold;
-    forbidDir = starve ? flow : forbidDir;
-    forbidDir = (!starve && !car) ? flow : forbidDir; 
+    // Switch when starve or bridge went empty
+    int starve = starvingThreashold > 0 && abs(dirCnt) > starvingThreashold;
     if(starve || !car) {
-        printf("\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s%s\n", starve ? " [STARVE]" : "", !car ? " [EMPTY BRIDGE]" : "");
+        forbidDir = flow;
+        printf("%s%s\n", starve ? "[STARVE WARNING]" : "", !car ? "[EMPTY BRIDGE]" : "");
         dirCnt = 0;
     }
+
+    // Prevent false positive
+    if((forbidDir == TOHANOVER && !hCnt)
+        || (forbidDir == TONORWICH && !nCnt)) {
+        forbidDir = 0;
+    }
+
     return starve || !car;
 }
 
@@ -166,7 +173,7 @@ void exitBridge(car_t* aCar) {
     // is low when switching the direction on the bridge. Because you may have 
     // multiple cars waiting to enter the bridge, so I choose to use broadcast
     car--;
-    if(aCar->dir == 1) {
+    if(aCar->dir == TOHANOVER) {
         if(switchSide()) {
             rc = pthread_cond_broadcast(&goNorwichCondition);
         } else {
@@ -214,9 +221,9 @@ void arriveBridge(car_t* aCar) {
 
     // Wait if necessary
     while(!safeGo(aCar)) {
-        if(aCar->dir == 1) {
+        if(aCar->dir == TOHANOVER) {
             rc = pthread_cond_wait(&goHanoverCondition, &lock);
-        } else if (aCar->dir == -1) {
+        } else if (aCar->dir == TONORWICH) {
             rc = pthread_cond_wait(&goNorwichCondition, &lock);
         }
         if(rc) {
@@ -282,7 +289,7 @@ int main(int argc, char *argv[]) {
         if((rand() % 100) < n2h ) {
             cars[i % INPUT_LEN].loc = NORWICH;
             cars[i % INPUT_LEN].id = i;
-            cars[i % INPUT_LEN].dir = 1;
+            cars[i % INPUT_LEN].dir = TOHANOVER;
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
@@ -294,7 +301,7 @@ int main(int argc, char *argv[]) {
         if((rand() % 100) < h2n ) {
             cars[i % INPUT_LEN].loc = HANOVER;
             cars[i % INPUT_LEN].id = i;
-            cars[i % INPUT_LEN].dir = -1;
+            cars[i % INPUT_LEN].dir = TONORWICH;
             rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
@@ -303,7 +310,7 @@ int main(int argc, char *argv[]) {
             }
             i++;
         }
-        usleep(SCALE / 4);
+        usleep(SCALE / 6);
     }
     free(cars);
     cars = NULL;
