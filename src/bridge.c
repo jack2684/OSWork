@@ -39,6 +39,19 @@ pthread_cond_t goHanoverCondition = PTHREAD_COND_INITIALIZER;
 pthread_cond_t goNorwichCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
+// pthread wrapping
+int acquire(pthread_mutex_t* lock) {
+    return pthread_mutex_lock(lock);
+}
+int release(pthread_mutex_t* lock) {
+    return pthread_mutex_unlock(lock);
+}
+int start(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg) {
+    return  pthread_create(thread, attr, start_routine, arg);
+}
+
+
+// Bridge states
 int maxCar, car = 0;                                // Max load and curent load
 int n2h, h2n;                                       // The prob on each side
 int hCnt, nCnt;                                     // Queue length on each side
@@ -59,13 +72,13 @@ void padding(char* pad, int n) {
 }
 
 void printOutsideLock() {
-    int rc = pthread_mutex_lock(&lock);
     int totalLen = maxCar * 8;
+    int rc = acquire(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
     }
-    
+
     // Printing
     char hanover[INPUT_LEN] = "";
     char norwich[INPUT_LEN] = "";
@@ -119,9 +132,7 @@ void printOutsideLock() {
     if(car < 0) {
         fprintf(stderr, "#Cars on bridge %d is negative\n", car);
     }
-
-    // Release the lock
-    rc = pthread_mutex_unlock(&lock);
+    rc = release(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -164,7 +175,7 @@ int switchSide() {
 
 void exitBridge(car_t* aCar) {
     // Lock the share resource
-    int rc = pthread_mutex_lock(&lock);
+    int rc = acquire(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -182,7 +193,7 @@ void exitBridge(car_t* aCar) {
         }
     } else if (aCar->dir == -1) { 
         if(switchSide()) {
-            pthread_cond_broadcast(&goHanoverCondition);
+            rc = pthread_cond_broadcast(&goHanoverCondition);
         } else {
             rc = pthread_cond_signal(&goNorwichCondition);
         }
@@ -198,7 +209,7 @@ void exitBridge(car_t* aCar) {
     aCar->id = -1;
 
     // Release the lock
-    rc = pthread_mutex_unlock(&lock);
+    rc = release(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -214,7 +225,7 @@ void arriveBridge(car_t* aCar) {
     int rc;
 
     // Lock the share resource
-    rc = pthread_mutex_lock(&lock);
+    rc = acquire(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -240,7 +251,7 @@ void arriveBridge(car_t* aCar) {
     car++;
     
     // Release the lock
-    rc = pthread_mutex_unlock(&lock);
+    rc = release(&lock);
     if(rc) {
         fprintf(stderr, "Lock acquire fails.\n");
         exit(-1);
@@ -291,7 +302,7 @@ int main(int argc, char *argv[]) {
             cars[i % INPUT_LEN].loc = NORWICH;
             cars[i % INPUT_LEN].id = i;
             cars[i % INPUT_LEN].dir = TOHANOVER;
-            rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
+            rc = start(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
                 printf("Too many threads are jaming at waiting queue.\n");
@@ -303,7 +314,7 @@ int main(int argc, char *argv[]) {
             cars[i % INPUT_LEN].loc = HANOVER;
             cars[i % INPUT_LEN].id = i;
             cars[i % INPUT_LEN].dir = TONORWICH;
-            rc = pthread_create(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
+            rc = start(&thread, &tattr, oneVehicle, cars + (i % INPUT_LEN));
             if(rc) {
                 printf("Create thread for %d fails: %s\n", i, strerror(errno));
                 printf("Too many threads are jaming at waiting queue.\n");
