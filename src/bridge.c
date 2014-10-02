@@ -38,6 +38,7 @@ typedef struct CAR {
 pthread_cond_t goHanoverCondition = PTHREAD_COND_INITIALIZER;
 pthread_cond_t goNorwichCondition = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock =  PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+
 int maxCar, car = 0;                                // Max load and curent load
 int n2h, h2n;                                       // The prob on each side
 int hCnt, nCnt;                                     // Queue length on each side
@@ -263,7 +264,7 @@ int main(int argc, char *argv[]) {
     } else {
         maxCar = atoi(argv[1]);
         n2h = atoi(argv[2]);
-        cross = 4;
+        cross = 2;
         h2n = atoi(argv[3]);
         starvingThreashold = atoi(argv[4]);
     }
@@ -310,7 +311,7 @@ int main(int argc, char *argv[]) {
             }
             i++;
         }
-        usleep(SCALE / 2);
+        usleep(SCALE / 6);
     }
     free(cars);
     cars = NULL;
